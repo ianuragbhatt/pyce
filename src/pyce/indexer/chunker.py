@@ -15,6 +15,7 @@ _PY_LANGUAGE = Language(tspython.language())
 _FUNCTION_TYPES = {"function_definition", "async_function_definition"}
 _CLASS_TYPES = {"class_definition"}
 _DECORATED_TYPES = {"decorated_definition"}
+_CALL_TYPES = {"call"}
 
 
 class Chunker:
@@ -28,10 +29,47 @@ class Chunker:
         except Exception:
             return [self._fallback_chunk(source, file_path)]
 
+    def chunk_text(self, source: str, file_path: str, language: str) -> list[Chunk]:
+        """
+        Best-effort chunking for non-Python text/config files.
+
+        We keep this intentionally simple: store a single MODULE chunk so retrieval
+        can surface config/docs without forcing assistants to open files directly.
+        """
+        lines = source.split("\n")
+        content = source[:5000]
+        chunk_id = Chunk.make_id(file_path, 1, len(lines), content)
+        return [
+            Chunk(
+                id=chunk_id,
+                content=content,
+                chunk_type=ChunkType.MODULE,
+                file_path=file_path,
+                start_line=1,
+                end_line=len(lines),
+                language=language,
+            )
+        ]
+
     def chunk_with_imports(self, source: str, file_path: str) -> tuple[list[Chunk], list[str]]:
         chunks = self.chunk(source, file_path)
         imports = self._extract_imports(source)
         return chunks, imports
+
+    def chunk_with_relationships(
+        self, source: str, file_path: str
+    ) -> tuple[list[Chunk], list[str], dict[str, set[str]]]:
+        """
+        Chunk Python plus extract a lightweight call graph.
+
+        Returns:
+        - chunks: function/class/module chunks
+        - imports: imported module strings ("pkg.subpkg")
+        - calls: mapping of caller function name -> set of callee names (best-effort, local names only)
+        """
+        chunks, imports = self.chunk_with_imports(source, file_path)
+        calls = self._extract_calls_by_function(source)
+        return chunks, imports, calls
 
     def _extract_chunks(self, root: Node, source: str, file_path: str) -> list[Chunk]:
         chunks: list[Chunk] = []
@@ -99,3 +137,42 @@ class Chunker:
         except Exception:
             pass
         return imports
+
+    def _extract_calls_by_function(self, source: str) -> dict[str, set[str]]:
+        calls_by_fn: dict[str, set[str]] = {}
+        try:
+            tree = self._parser.parse(source.encode("utf-8"))
+            root = tree.root_node
+            for node in root.children:
+                fn_node = None
+                if node.type in _FUNCTION_TYPES:
+                    fn_node = node
+                elif node.type in _DECORATED_TYPES:
+                    defn = node.child_by_field_name("definition")
+                    if defn and defn.type in _FUNCTION_TYPES:
+                        fn_node = node
+
+                if fn_node is None:
+                    continue
+
+                name_node = fn_node.child_by_field_name("name")
+                if not name_node:
+                    continue
+                fn_name = name_node.text.decode("utf-8")
+                callees = calls_by_fn.setdefault(fn_name, set())
+
+                stack = [fn_node]
+                while stack:
+                    cur = stack.pop()
+                    if cur.type in _CALL_TYPES:
+                        func = cur.child_by_field_name("function")
+                        if func:
+                            raw = func.text.decode("utf-8")
+                            # best-effort: foo(), obj.foo(), pkg.mod.foo()
+                            name = raw.split(".")[-1]
+                            if name and name.isidentifier():
+                                callees.add(name)
+                    stack.extend(reversed(cur.children))
+        except Exception:
+            return calls_by_fn
+        return calls_by_fn

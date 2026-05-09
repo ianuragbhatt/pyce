@@ -74,6 +74,19 @@ class IndexerConfig:
     ignore: list[str] = field(default_factory=lambda: list(DEFAULT_IGNORE))
     redact_secrets: bool = True
     max_file_size: int = 2 * 1024 * 1024
+    include_extensions: list[str] = field(
+        default_factory=lambda: [
+            ".py",
+            ".toml",
+            ".yaml",
+            ".yml",
+            ".json",
+            ".md",
+            ".txt",
+            "Dockerfile",
+            "Makefile",
+        ]
+    )
     watch: bool = True
     debounce_ms: int = 500
 
