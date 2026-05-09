@@ -18,6 +18,76 @@ from pyce.storage.backend import LocalBackend
 
 _pipeline_lock = asyncio.Lock()
 
+def _build_module_index(project_root: Path, files: list[Path]) -> dict[str, str]:
+    """
+    Build a best-effort mapping from module import path -> repo-relative file path.
+
+    Examples:
+    - src/pkg/foo.py -> "src.pkg.foo" (if project_root is repo root)
+    - pkg/__init__.py -> "pkg"
+    """
+    index: dict[str, str] = {}
+    for fp in files:
+        if fp.suffix.lower() != ".py":
+            continue
+        rel = str(fp.relative_to(project_root)).replace("\\", "/")
+        no_ext = rel[:-3]  # strip .py
+        if no_ext.endswith("/__init__"):
+            mod = no_ext[: -len("/__init__")].replace("/", ".")
+        else:
+            mod = no_ext.replace("/", ".")
+        index[mod] = rel
+    return index
+
+
+def _resolve_import_to_file(import_path: str, module_index: dict[str, str]) -> str | None:
+    """
+    Resolve an import path like 'pkg.sub' to the closest matching module file.
+    Falls back to parent modules (pkg.sub.x -> pkg.sub -> pkg).
+    """
+    cur = import_path
+    while cur:
+        if cur in module_index:
+            return module_index[cur]
+        if "." not in cur:
+            break
+        cur = cur.rsplit(".", 1)[0]
+    return None
+
+
+def _build_calls_edges(
+    rel_path: str,
+    chunks: list[Chunk],
+    calls_by_fn: dict[str, set[str]],
+) -> list[GraphEdge]:
+    """
+    Build CALLS edges between chunks within the same file (fast + reliable).
+    """
+    name_to_id: dict[str, str] = {}
+    for c in chunks:
+        if c.file_path != rel_path:
+            continue
+        if c.chunk_type.value in ("FUNCTION", "CLASS"):
+            name_to_id[_chunk_name(c)] = c.id
+
+    edges: list[GraphEdge] = []
+    for caller_name, callees in calls_by_fn.items():
+        caller_id = name_to_id.get(caller_name)
+        if not caller_id:
+            continue
+        for callee in callees:
+            callee_id = name_to_id.get(callee)
+            if not callee_id or callee_id == caller_id:
+                continue
+            edges.append(
+                GraphEdge(
+                    source_id=caller_id,
+                    target_id=callee_id,
+                    edge_type=EdgeType.CALLS,
+                )
+            )
+    return edges
+
 
 async def run_indexing(
     project_root: Path,
@@ -44,6 +114,7 @@ async def run_indexing(
         chunker = Chunker()
 
         files_to_index = _discover_files(project_root, config, specific_path)
+        module_index = _build_module_index(project_root, files_to_index)
 
         if full:
             old_files = set(manifest.get_files().keys())
@@ -93,11 +164,14 @@ async def run_indexing(
                     source = redact_secrets(source)
 
                 if ext == ".py":
-                    chunks, imports = await asyncio.to_thread(chunker.chunk_with_imports, source, rel_path)
+                    chunks, imports, calls_by_fn = await asyncio.to_thread(
+                        chunker.chunk_with_relationships, source, rel_path
+                    )
                 else:
                     language = ext.lstrip(".") or basename.lower()
                     chunks = chunker.chunk_text(source, rel_path, language=language)
                     imports = []
+                    calls_by_fn = {}
 
                 file_node = GraphNode(
                     id=f"file:{rel_path}",
@@ -122,11 +196,19 @@ async def run_indexing(
                     ))
 
                 for imp in imports:
-                    all_edges.append(GraphEdge(
-                        source_id=file_node.id,
-                        target_id=f"module:{imp}",
-                        edge_type=EdgeType.IMPORTS,
-                    ))
+                    target_rel = _resolve_import_to_file(imp, module_index)
+                    if not target_rel:
+                        continue
+                    all_edges.append(
+                        GraphEdge(
+                            source_id=file_node.id,
+                            target_id=f"file:{target_rel}",
+                            edge_type=EdgeType.IMPORTS,
+                        )
+                    )
+
+                if calls_by_fn and chunks:
+                    all_edges.extend(_build_calls_edges(rel_path, chunks, calls_by_fn))
 
                 all_chunks.extend(chunks)
                 manifest.update_file(rel_path, content_hash)
