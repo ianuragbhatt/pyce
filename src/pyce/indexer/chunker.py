@@ -28,6 +28,28 @@ class Chunker:
         except Exception:
             return [self._fallback_chunk(source, file_path)]
 
+    def chunk_text(self, source: str, file_path: str, language: str) -> list[Chunk]:
+        """
+        Best-effort chunking for non-Python text/config files.
+
+        We keep this intentionally simple: store a single MODULE chunk so retrieval
+        can surface config/docs without forcing assistants to open files directly.
+        """
+        lines = source.split("\n")
+        content = source[:5000]
+        chunk_id = Chunk.make_id(file_path, 1, len(lines), content)
+        return [
+            Chunk(
+                id=chunk_id,
+                content=content,
+                chunk_type=ChunkType.MODULE,
+                file_path=file_path,
+                start_line=1,
+                end_line=len(lines),
+                language=language,
+            )
+        ]
+
     def chunk_with_imports(self, source: str, file_path: str) -> tuple[list[Chunk], list[str]]:
         chunks = self.chunk(source, file_path)
         imports = self._extract_imports(source)

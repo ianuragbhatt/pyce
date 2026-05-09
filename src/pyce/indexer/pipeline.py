@@ -65,6 +65,8 @@ async def run_indexing(
 
             for file_path in batch:
                 rel_path = str(file_path.relative_to(project_root)).replace("\\", "/")
+                ext = file_path.suffix.lower()
+                basename = file_path.name
 
                 try:
                     content_bytes = file_path.read_bytes()
@@ -90,7 +92,12 @@ async def run_indexing(
                 if config.indexer.redact_secrets:
                     source = redact_secrets(source)
 
-                chunks, imports = await asyncio.to_thread(chunker.chunk_with_imports, source, rel_path)
+                if ext == ".py":
+                    chunks, imports = await asyncio.to_thread(chunker.chunk_with_imports, source, rel_path)
+                else:
+                    language = ext.lstrip(".") or basename.lower()
+                    chunks = chunker.chunk_text(source, rel_path, language=language)
+                    imports = []
 
                 file_node = GraphNode(
                     id=f"file:{rel_path}",
@@ -146,6 +153,7 @@ async def run_indexing(
 def _discover_files(project_root: Path, config: Config, specific_path: Path | None = None) -> list[Path]:
     search_root = specific_path or project_root
     files: list[Path] = []
+    allowed_exts = {e.lower() for e in (config.indexer.include_extensions or [".py"])}
 
     for root, dirs, filenames in os.walk(search_root):
         rel_root = Path(root).relative_to(project_root)
@@ -163,15 +171,15 @@ def _discover_files(project_root: Path, config: Config, specific_path: Path | No
         dirs[:] = [d for d in dirs if not _should_ignore(str(rel_root / d).replace("\\", "/"), config.indexer.ignore)]
 
         for filename in filenames:
-            if not filename.endswith(".py"):
-                continue
             fp = Path(root) / filename
             rel_fp = str(fp.relative_to(project_root)).replace("\\", "/")
             if _should_ignore(rel_fp, config.indexer.ignore):
                 continue
             if is_secret_file(fp):
                 continue
-            files.append(fp)
+            ext = fp.suffix.lower()
+            if (ext and ext in allowed_exts) or (not ext and filename.lower() in allowed_exts):
+                files.append(fp)
 
     return files
 
