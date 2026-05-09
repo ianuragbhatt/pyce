@@ -1,0 +1,27 @@
+[project]
+name = "pyce"
+version = "0.1.0"
+description = "Python Code Context Engine — MCP server for AI coding assistants"
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "click>=8.0",
+    "pyyaml>=6.0",
+    "tree-sitter>=0.23",
+    "tree-sitter-python>=0.23",
+    "fastembed>=0.5",
+    "sqlite-vec>=0.1",
+    "mcp>=1.0",
+    "watchdog>=4.0",
+    "httpx>=0.27",
+]
+
+[project.scripts]
+pyce = "pyce.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pyce"]
