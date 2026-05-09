@@ -1,0 +1,1002 @@
+{
+  "version": 2,
+  "project": "pyce",
+  "notes": "primary_files: must-hit for strict eval; secondary_files: supporting context (partial credit). must_mention: case-insensitive substring checks against concatenated retrieved chunk text (see score_golden.py). Regenerate: uv run python eval/build_golden_queries.py. Run eval: uv run python eval/score_golden.py --top-k 10 --relax-k 20",
+  "categories": {
+    "cli": "CLI commands and project root discovery",
+    "integration": "MCP server, editors, sessions",
+    "retrieval": "HybridRetriever, query parser, repo_map, confidence",
+    "storage": "SQLite backends, sqlite_vec, FTS, graph",
+    "indexing": "Pipeline, chunker, manifest, embedder, watcher, secrets",
+    "config": "YAML merge, defaults, ignore lists",
+    "compression": "Compressor and quality",
+    "testing": "pytest modules",
+    "docs": "README-level product questions",
+    "packaging": "pyproject and version",
+    "models": "Chunk, enums, RetrievalResult",
+    "misc": "Other repo files"
+  },
+  "items": [
+    {
+      "id": "q01",
+      "category": "cli",
+      "query": "Where is the pyce CLI entry point defined?",
+      "answer": "Click group `main` in `cli.py`; package script `pyce = pyce.cli:main` in pyproject.",
+      "primary_files": [
+        "src/pyce/cli.py"
+      ],
+      "secondary_files": [
+        "pyproject.toml"
+      ],
+      "must_mention": [
+        "pyce.cli:main",
+        "@click.group",
+        "def main"
+      ]
+    },
+    {
+      "id": "q02",
+      "category": "cli",
+      "query": "How does pyce initialize a project and configure editors?",
+      "answer": "`init` loads config, runs `run_indexing` full=True, then `configure_editors` for MCP JSON files.",
+      "primary_files": [
+        "src/pyce/cli.py"
+      ],
+      "secondary_files": [
+        "src/pyce/integration/editors.py",
+        "src/pyce/indexer/pipeline.py"
+      ],
+      "must_mention": [
+        "configure_editors",
+        "run_indexing"
+      ]
+    },
+    {
+      "id": "q03",
+      "category": "cli",
+      "query": "What command starts the MCP server in stdio mode?",
+      "answer": "`pyce serve` builds `ContextEngineMCP` and runs the MCP server.",
+      "primary_files": [
+        "src/pyce/cli.py"
+      ],
+      "secondary_files": [
+        "src/pyce/integration/mcp_server.py"
+      ],
+      "must_mention": [
+        "serve",
+        "ContextEngineMCP"
+      ]
+    },
+    {
+      "id": "q04",
+      "category": "integration",
+      "query": "Where does pyce write Claude Code MCP configuration?",
+      "answer": "Project `.mcp.json`, key `mcpServers.pyce` with command pyce and args serve.",
+      "primary_files": [
+        "src/pyce/integration/editors.py"
+      ],
+      "secondary_files": [],
+      "must_mention": [
+        ".mcp.json",
+        "mcpServers"
+      ]
+    },
+    {
+      "id": "q05",
+      "category": "integration",
+      "query": "How is GitHub Copilot MCP configured for pyce?",
+      "answer": "`.vscode/mcp.json` under `servers.pyce`.",
+      "primary_files": [
+        "src/pyce/integration/editors.py"
+      ],
+      "secondary_files": [],
+      "must_mention": [
+        ".vscode",
+        "mcp.json",
+        "servers"
+      ]
+    },
+    {
+      "id": "q06",
+      "category": "integration",
+      "query": "What is the MCP server class and Server name string?",
+      "answer": "`ContextEngineMCP`; MCP `Server(\"pyce\")`.",
+      "primary_files": [
+        "src/pyce/integration/mcp_server.py"
+      ],
+      "secondary_files": [],
+      "must_mention": [
+        "ContextEngineMCP",
+        "Server(\"pyce\")"
+      ]
+    },
+    {
+      "id": "q07",
+      "category": "integration",
+      "query": "What MCP tool performs hybrid vector and BM25 search?",
+      "answer": "Tool `context_search`.",
+      "primary_files": [
+        "src/pyce/integration/mcp_server.py"
+      ],
+      "secondary_files": [
+        "src/pyce/retrieval/retriever.py"
+      ],
+      "must_mention": [
+        "context_search",
+        "hybrid"
+      ]
+    },
+    {
+      "id": "q08",
+      "category": "integration",
+      "query": "Which MCP tool walks the code graph for calls and imports?",
+      "answer": "`related_context` with chunk_id; graph uses CALLS/IMPORTS.",
+      "primary_files": [
+        "src/pyce/integration/mcp_server.py"
+      ],
+      "secondary_files": [
+        "src/pyce/storage/graph_store.py"
+      ],
+      "must_mention": [
+        "related_context",
+        "chunk_id"
+      ]
+    },
+    {
+      "id": "q09",
+      "category": "integration",
+      "query": "What MCP tools report index health and trigger reindex?",
+      "answer": "`index_status` and `reindex` (optional full boolean).",
+      "primary_files": [
+        "src/pyce/integration/mcp_server.py"
+      ],
+      "secondary_files": [
+        "src/pyce/indexer/pipeline.py"
+      ],
+      "must_mention": [
+        "index_status",
+        "reindex"
+      ]
+    },
+    {
+      "id": "q10",
+      "category": "integration",
+      "query": "What MCP tool expands a compressed chunk by id?",
+      "answer": "`expand_chunk` requires chunk_id.",
+      "primary_files": [
+        "src/pyce/integration/mcp_server.py"
+      ],
+      "secondary_files": [],
+      "must_mention": [
+        "expand_chunk",
+        "chunk_id"
+      ]
+    },
+    {
+      "id": "q11",
+      "category": "retrieval",
+      "query": "How does HybridRetriever combine vector and full-text results?",
+      "answer": "Parallel `vector_search` and `fts_search`, then `_rrf_merge`; FTS boost for CODE_LOOKUP.",
+      "primary_files": [
+        "src/pyce/retrieval/retriever.py"
+      ],
+      "secondary_files": [
+        "src/pyce/retrieval/query_parser.py"
+      ],
+      "must_mention": [
+        "_rrf_merge",
+        "vector_search",
+        "fts_search"
+      ]
+    },
+    {
+      "id": "q12",
+      "category": "retrieval",
+      "query": "What is the RRF rank fusion constant k in pyce?",
+      "answer": "`k = 60` inside `_rrf_merge`.",
+      "primary_files": [
+        "src/pyce/retrieval/retriever.py"
+      ],
+      "secondary_files": [],
+      "must_mention": [
+        "_rrf_merge",
+        "k = 60"
+      ]
+    },
+    {
+      "id": "q13",
+      "category": "retrieval",
+      "query": "How does pyce cap chunks per file in results?",
+      "answer": "`max_chunks_per_file` from RetrievalConfig (default 3).",
+      "primary_files": [
+        "src/pyce/retrieval/retriever.py"
+      ],
+      "secondary_files": [
+        "src/pyce/config.py"
+      ],
+      "must_mention": [
+        "max_chunks_per_file",
+        "file_counts"
+      ]
+    },
+    {
+      "id": "q14",
+      "category": "retrieval",
+      "query": "What happens when retrieval exceeds the token budget?",
+      "answer": "`overflow_ids` on RetrievalResult; chunks trimmed by token_count.",
+      "primary_files": [
+        "src/pyce/retrieval/retriever.py"
+      ],
+      "secondary_files": [
+        "src/pyce/models.py"
+      ],
+      "must_mention": [
+        "overflow_ids",
+        "max_tokens"
+      ]
+    },
+    {
+      "id": "q15",
+      "category": "retrieval",
+      "query": "What query intents does parse_query classify?",
+      "answer": "CODE_LOOKUP, DECISION_RECALL, ARCHITECTURE, GENERAL via regex buckets.",
+      "primary_files": [
+        "src/pyce/retrieval/query_parser.py"
+      ],
+      "secondary_files": [],
+      "must_mention": [
+        "QueryIntent",
+        "DECISION_RECALL",
+        "ARCHITECTURE"
+      ]
+    },
+    {
+      "id": "q16",
+      "category": "retrieval",
+      "query": "Where is confidence scoring implemented for ranked chunks?",
+      "answer": "`ConfidenceScorer` combined with RRF: 0.5*confidence + 0.5*scaled RRF.",
+      "primary_files": [
+        "src/pyce/retrieval/confidence.py"
+      ],
+      "secondary_files": [
+        "src/pyce/retrieval/retriever.py"
+      ],
+      "must_mention": [
+        "ConfidenceScorer",
+        "final_score"
+      ]
+    },
+    {
+      "id": "q17",
+      "category": "retrieval",
+      "query": "How does graph expansion add bonus chunks after the main ranking?",
+      "answer": "`_expand_graph` uses top files, `get_related_file_paths`, cosine distance on embeddings in related files.",
+      "primary_files": [
+        "src/pyce/retrieval/retriever.py"
+      ],
+      "secondary_files": [
+        "src/pyce/storage/backend.py"
+      ],
+      "must_mention": [
+        "_expand_graph",
+        "get_related_file_paths",
+        "_cosine_distance"
+      ]
+    },
+    {
+      "id": "q18",
+      "category": "retrieval",
+      "query": "Where is PageRank-style repo symbol overview generated?",
+      "answer": "`generate_repo_map` in repo_map.py; MCP tool `repo_map`.",
+      "primary_files": [
+        "src/pyce/retrieval/repo_map.py"
+      ],
+      "secondary_files": [
+        "src/pyce/integration/mcp_server.py"
+      ],
+      "must_mention": [
+        "generate_repo_map",
+        "repo_map"
+      ]
+    },
+    {
+      "id": "q19",
+      "category": "storage",
+      "query": "What does LocalBackend compose?",
+      "answer": "VectorStore, FTSStore, GraphStore on one db path; threaded ingest/search.",
+      "primary_files": [
+        "src/pyce/storage/backend.py"
+      ],
+      "secondary_files": [],
+      "must_mention": [
+        "VectorStore",
+        "FTSStore",
+        "GraphStore"
+      ]
+    },
+    {
+      "id": "q20",
+      "category": "storage",
+      "query": "How does FTS5 tokenization configure in FTSStore?",
+      "answer": "Virtual table chunks_fts with tokenize='porter unicode61'.",
+      "primary_files": [
+        "src/pyce/storage/fts_store.py"
+      ],
+      "secondary_files": [],
+      "must_mention": [
+        "chunks_fts",
+        "porter unicode61"
+      ]
+    },
+    {
+      "id": "q21",
+      "category": "storage",
+      "query": "How does FTSStore wrap the user query for MATCH?",
+      "answer": "Phrase quoting: safe_query = f'\"{query}\"'.",
+      "primary_files": [
+        "src/pyce/storage/fts_store.py"
+      ],
+      "secondary_files": [],
+      "must_mention": [
+        "safe_query",
+        "MATCH"
+      ]
+    },
+    {
+      "id": "q22",
+      "category": "storage",
+      "query": "How does VectorStore load sqlite-vec and store embeddings?",
+      "answer": "enable_load_extension, sqlite_vec.load, vec0 chunks_vec, float blobs for MATCH.",
+      "primary_files": [
+        "src/pyce/storage/vector_store.py"
+      ],
+      "secondary_files": [],
+      "must_mention": [
+        "sqlite_vec",
+        "chunks_vec",
+        "vec0"
+      ]
+    },
+    {
+      "id": "q23",
+      "category": "storage",
+      "query": "What NodeType and EdgeType enums does the graph use?",
+      "answer": "Nodes: FILE, FUNCTION, CLASS, MODULE. Edges: CALLS, IMPORTS, DEFINES.",
+      "primary_files": [
+        "src/pyce/models.py"
+      ],
+      "secondary_files": [
+        "src/pyce/storage/graph_store.py"
+      ],
+      "must_mention": [
+        "EdgeType",
+        "CALLS",
+        "IMPORTS"
+      ]
+    },
+    {
+      "id": "q24",
+      "category": "storage",
+      "query": "How does GraphStore find neighbor files for retrieval expansion?",
+      "answer": "`neighbors_for_files` joins edges to nodes, filters edge types.",
+      "primary_files": [
+        "src/pyce/storage/graph_store.py"
+      ],
+      "secondary_files": [
+        "src/pyce/storage/backend.py"
+      ],
+      "must_mention": [
+        "neighbors_for_files",
+        "edges",
+        "nodes"
+      ]
+    },
+    {
+      "id": "q25",
+      "category": "storage",
+      "query": "Why does sqlite_compat exist?",
+      "answer": "Probes FTS5 support; picks sqlite3 module; FTSStore errors clearly if FTS5 missing.",
+      "primary_files": [
+        "src/pyce/storage/sqlite_compat.py"
+      ],
+      "secondary_files": [
+        "src/pyce/storage/fts_store.py"
+      ],
+      "must_mention": [
+        "FTS5",
+        "_supports_fts5"
+      ]
+    },
+    {
+      "id": "q26",
+      "category": "indexing",
+      "query": "How does the indexer map import paths to files?",
+      "answer": "`_build_module_index` and `_resolve_import_to_file` walk parent modules.",
+      "primary_files": [
+        "src/pyce/indexer/pipeline.py"
+      ],
+      "secondary_files": [],
+      "must_mention": [
+        "_build_module_index",
+        "_resolve_import_to_file"
+      ]
+    },
+    {
+      "id": "q27",
+      "category": "indexing",
+      "query": "How are CALLS edges created between chunks?",
+      "answer": "`_build_calls_edges` maps names to chunk ids within a file.",
+      "primary_files": [
+        "src/pyce/indexer/pipeline.py"
+      ],
+      "secondary_files": [],
+      "must_mention": [
+        "_build_calls_edges",
+        "EdgeType.CALLS"
+      ]
+    },
+    {
+      "id": "q28",
+      "category": "indexing",
+      "query": "What lock serializes concurrent indexing?",
+      "answer": "`_pipeline_lock = asyncio.Lock()` in run_indexing.",
+      "primary_files": [
+        "src/pyce/indexer/pipeline.py"
+      ],
+      "secondary_files": [],
+      "must_mention": [
+        "_pipeline_lock",
+        "asyncio.Lock"
+      ]
+    },
+    {
+      "id": "q29",
+      "category": "indexing",
+      "query": "How does incremental indexing skip unchanged files?",
+      "answer": "`Manifest.has_changed` compares stored SHA-256 per relative path.",
+      "primary_files": [
+        "src/pyce/indexer/manifest.py"
+      ],
+      "secondary_files": [
+        "src/pyce/indexer/pipeline.py"
+      ],
+      "must_mention": [
+        "has_changed",
+        "hash_content"
+      ]
+    },
+    {
+      "id": "q30",
+      "category": "indexing",
+      "query": "How does Chunker structure Python sources?",
+      "answer": "tree-sitter; functions, classes, module; `chunk_with_imports`.",
+      "primary_files": [
+        "src/pyce/indexer/chunker.py"
+      ],
+      "secondary_files": [],
+      "must_mention": [
+        "Chunker",
+        "chunk_with_imports",
+        "tree_sitter"
+      ]
+    },
+    {
+      "id": "q31",
+      "category": "indexing",
+      "query": "Where are secrets redacted during indexing?",
+      "answer": "`redact_secrets` / `is_secret_file` when indexer.redact_secrets true.",
+      "primary_files": [
+        "src/pyce/indexer/secrets.py"
+      ],
+      "secondary_files": [
+        "src/pyce/indexer/pipeline.py"
+      ],
+      "must_mention": [
+        "redact_secrets",
+        "is_secret_file"
+      ]
+    },
+    {
+      "id": "q32",
+      "category": "indexing",
+      "query": "What does the filesystem watcher do?",
+      "answer": "watchdog-based watcher debounces and triggers re-index when config enables watch.",
+      "primary_files": [
+        "src/pyce/indexer/watcher.py"
+      ],
+      "secondary_files": [
+        "src/pyce/config.py"
+      ],
+      "must_mention": [
+        "watchdog",
+        "Observer"
+      ]
+    },
+    {
+      "id": "q33",
+      "category": "indexing",
+      "query": "How does Embedder batch embed chunks and use the cache?",
+      "answer": "`embed` uses `_content_hash`, cache get/put_batch, `model.embed(texts, batch_size)`.",
+      "primary_files": [
+        "src/pyce/indexer/embedder.py"
+      ],
+      "secondary_files": [],
+      "must_mention": [
+        "EmbeddingCache",
+        "put_batch",
+        "TextEmbedding"
+      ]
+    },
+    {
+      "id": "q34",
+      "category": "config",
+      "query": "Where is project pyce YAML merged from?",
+      "answer": "`~/.pyce/config.yaml` then `.context-engine.yaml` in project root.",
+      "primary_files": [
+        "src/pyce/config.py"
+      ],
+      "secondary_files": [],
+      "must_mention": [
+        ".context-engine.yaml",
+        "_merge_yaml"
+      ]
+    },
+    {
+      "id": "q35",
+      "category": "config",
+      "query": "What paths are ignored by default when indexing?",
+      "answer": "DEFAULT_IGNORE lists .git, __pycache__, .venv, caches, etc.",
+      "primary_files": [
+        "src/pyce/config.py"
+      ],
+      "secondary_files": [
+        "src/pyce/indexer/pipeline.py"
+      ],
+      "must_mention": [
+        "DEFAULT_IGNORE",
+        ".pytest_cache"
+      ]
+    },
+    {
+      "id": "q36",
+      "category": "config",
+      "query": "Default embedding model and compression provider?",
+      "answer": "BAAI/bge-small-en-v1.5; CompressionConfig provider ollama.",
+      "primary_files": [
+        "src/pyce/config.py"
+      ],
+      "secondary_files": [
+        "src/pyce/indexer/embedder.py"
+      ],
+      "must_mention": [
+        "BAAI/bge-small-en-v1.5",
+        "ollama"
+      ]
+    },
+    {
+      "id": "q37",
+      "category": "config",
+      "query": "Where is per-project storage path derived?",
+      "answer": "`storage_path` default ~/.pyce/projects; `_project_hash(project_root)` subdirectory.",
+      "primary_files": [
+        "src/pyce/config.py"
+      ],
+      "secondary_files": [
+        "src/pyce/cli.py",
+        "src/pyce/indexer/pipeline.py"
+      ],
+      "must_mention": [
+        "_project_hash",
+        "storage_path"
+      ]
+    },
+    {
+      "id": "q38",
+      "category": "compression",
+      "query": "How does Compressor integrate with retrieval?",
+      "answer": "Compressor uses CompressionConfig; MCP wires it for over-budget handling.",
+      "primary_files": [
+        "src/pyce/compression/compressor.py"
+      ],
+      "secondary_files": [
+        "src/pyce/integration/mcp_server.py",
+        "src/pyce/config.py"
+      ],
+      "must_mention": [
+        "Compressor",
+        "CompressionConfig"
+      ]
+    },
+    {
+      "id": "q39",
+      "category": "compression",
+      "query": "Where is compression quality assessed?",
+      "answer": "`has_quality` compares identifier overlap ratio (threshold 0.4) in `quality.py`.",
+      "primary_files": [
+        "src/pyce/compression/quality.py"
+      ],
+      "secondary_files": [],
+      "must_mention": [
+        "has_quality",
+        "0.4"
+      ]
+    },
+    {
+      "id": "q40",
+      "category": "integration",
+      "query": "How does SessionCapture relate to storage layout?",
+      "answer": "sessions under storage_dir/sessions; constructed in ContextEngineMCP.",
+      "primary_files": [
+        "src/pyce/integration/session_capture.py"
+      ],
+      "secondary_files": [
+        "src/pyce/integration/mcp_server.py"
+      ],
+      "must_mention": [
+        "SessionCapture",
+        "sessions"
+      ]
+    },
+    {
+      "id": "q41",
+      "category": "cli",
+      "query": "What does pyce search do when the index is empty?",
+      "answer": "backend.count()==0 prints to run pyce index first.",
+      "primary_files": [
+        "src/pyce/cli.py"
+      ],
+      "secondary_files": [],
+      "must_mention": [
+        "No index found",
+        "pyce index"
+      ]
+    },
+    {
+      "id": "q42",
+      "category": "cli",
+      "query": "How does CLI find project root?",
+      "answer": "_find_project_root checks cwd for pyproject.toml, .git, etc.",
+      "primary_files": [
+        "src/pyce/cli.py"
+      ],
+      "secondary_files": [],
+      "must_mention": [
+        "_find_project_root",
+        "pyproject.toml"
+      ]
+    },
+    {
+      "id": "q43",
+      "category": "models",
+      "query": "How are chunk IDs and token_count defined?",
+      "answer": "Chunk.make_id SHA-256 truncated; token_count from len(text)//4.",
+      "primary_files": [
+        "src/pyce/models.py"
+      ],
+      "secondary_files": [],
+      "must_mention": [
+        "make_id",
+        "token_count"
+      ]
+    },
+    {
+      "id": "q44",
+      "category": "models",
+      "query": "ChunkType values including non-code kinds?",
+      "answer": "FUNCTION, CLASS, MODULE, DOC, COMMENT, DECISION.",
+      "primary_files": [
+        "src/pyce/models.py"
+      ],
+      "secondary_files": [],
+      "must_mention": [
+        "ChunkType",
+        "DECISION"
+      ]
+    },
+    {
+      "id": "q45",
+      "category": "models",
+      "query": "ConfidenceLevel thresholds?",
+      "answer": "from_score: >=0.7 HIGH, >=0.4 MEDIUM else LOW.",
+      "primary_files": [
+        "src/pyce/models.py"
+      ],
+      "secondary_files": [
+        "src/pyce/cli.py"
+      ],
+      "must_mention": [
+        "from_score",
+        "ConfidenceLevel"
+      ]
+    },
+    {
+      "id": "q46",
+      "category": "testing",
+      "query": "Which test covers retriever token overflow?",
+      "answer": "tests/test_retriever_token_budget.py",
+      "primary_files": [
+        "tests/test_retriever_token_budget.py"
+      ],
+      "secondary_files": [
+        "src/pyce/retrieval/retriever.py"
+      ],
+      "must_mention": [
+        "overflow_ids",
+        "max_tokens"
+      ]
+    },
+    {
+      "id": "q47",
+      "category": "testing",
+      "query": "Which test validates Python graph edges?",
+      "answer": "tests/test_python_graph_edges.py",
+      "primary_files": [
+        "tests/test_python_graph_edges.py"
+      ],
+      "secondary_files": [],
+      "must_mention": []
+    },
+    {
+      "id": "q48",
+      "category": "testing",
+      "query": "Which test relates to discoverable files / ignore behavior?",
+      "answer": "tests/test_discover_files.py",
+      "primary_files": [
+        "tests/test_discover_files.py"
+      ],
+      "secondary_files": [
+        "src/pyce/indexer/pipeline.py"
+      ],
+      "must_mention": []
+    },
+    {
+      "id": "q49",
+      "category": "docs",
+      "query": "What problem does pyce solve per README?",
+      "answer": "Avoid feeding whole files to LLMs; return relevant snippets via MCP.",
+      "primary_files": [
+        "README.md"
+      ],
+      "secondary_files": [],
+      "must_mention": [
+        "MCP",
+        "tokens"
+      ]
+    },
+    {
+      "id": "q50",
+      "category": "docs",
+      "query": "What stack does README list for retrieval?",
+      "answer": "Hybrid vector + BM25 + graph; fastembed embeddings.",
+      "primary_files": [
+        "README.md"
+      ],
+      "secondary_files": [],
+      "must_mention": [
+        "BM25",
+        "graph"
+      ]
+    },
+    {
+      "id": "q51",
+      "category": "packaging",
+      "query": "pyce version and supported Python range?",
+      "answer": "0.1.0; requires-python >=3.11,<3.14.",
+      "primary_files": [
+        "pyproject.toml"
+      ],
+      "secondary_files": [
+        "src/pyce/__init__.py"
+      ],
+      "must_mention": [
+        "0.1.0",
+        "requires-python"
+      ]
+    },
+    {
+      "id": "q52",
+      "category": "packaging",
+      "query": "What is __version__ in the pyce package?",
+      "answer": "0.1.0 in __init__.py",
+      "primary_files": [
+        "src/pyce/__init__.py"
+      ],
+      "secondary_files": [
+        "pyproject.toml"
+      ],
+      "must_mention": [
+        "__version__",
+        "0.1.0"
+      ]
+    },
+    {
+      "id": "q53",
+      "category": "misc",
+      "query": "What does repo root main.py print?",
+      "answer": "Hello from code-indexer!",
+      "primary_files": [
+        "main.py"
+      ],
+      "secondary_files": [],
+      "must_mention": [
+        "Hello from code-indexer"
+      ]
+    },
+    {
+      "id": "q54",
+      "category": "integration",
+      "query": "What MCP resource URIs does pyce register in list_resources?",
+      "answer": "`pyce://project/overview` and `pyce://index/status` (see `read_resource`).",
+      "primary_files": [
+        "src/pyce/integration/mcp_server.py"
+      ],
+      "secondary_files": [],
+      "must_mention": [
+        "pyce://project/overview",
+        "pyce://index/status"
+      ]
+    },
+    {
+      "id": "q55",
+      "category": "retrieval",
+      "query": "What stop-words or pattern lists does query_parser use?",
+      "answer": "_STOP_WORDS set and _CODE_PATTERNS / _ARCHITECTURE_PATTERNS regex lists.",
+      "primary_files": [
+        "src/pyce/retrieval/query_parser.py"
+      ],
+      "secondary_files": [],
+      "must_mention": [
+        "_STOP_WORDS",
+        "_CODE_PATTERNS"
+      ]
+    },
+    {
+      "id": "q56",
+      "category": "indexing",
+      "query": "What function decides if a path should be ignored during indexing?",
+      "answer": "_should_ignore uses fnmatch against indexer ignore patterns.",
+      "primary_files": [
+        "src/pyce/indexer/pipeline.py"
+      ],
+      "secondary_files": [
+        "src/pyce/config.py"
+      ],
+      "must_mention": [
+        "_should_ignore",
+        "fnmatch"
+      ]
+    },
+    {
+      "id": "q57",
+      "category": "storage",
+      "query": "How does backend wire graph expansion edge types?",
+      "answer": "get_related_file_paths calls neighbors_for_files with CALLS and IMPORTS.",
+      "primary_files": [
+        "src/pyce/storage/backend.py"
+      ],
+      "secondary_files": [
+        "src/pyce/storage/graph_store.py"
+      ],
+      "must_mention": [
+        "get_related_file_paths",
+        "EdgeType.CALLS"
+      ]
+    },
+    {
+      "id": "q58",
+      "category": "indexing",
+      "query": "What does Manifest.hash_content use?",
+      "answer": "hashlib.sha256 on bytes content.",
+      "primary_files": [
+        "src/pyce/indexer/manifest.py"
+      ],
+      "secondary_files": [],
+      "must_mention": [
+        "hash_content",
+        "sha256"
+      ]
+    },
+    {
+      "id": "q59",
+      "category": "retrieval",
+      "query": "How does RRF merge weight FTS for code lookup intent?",
+      "answer": "fts_boost = 1.5 when intent is CODE_LOOKUP.",
+      "primary_files": [
+        "src/pyce/retrieval/retriever.py"
+      ],
+      "secondary_files": [
+        "src/pyce/retrieval/query_parser.py"
+      ],
+      "must_mention": [
+        "fts_boost",
+        "CODE_LOOKUP"
+      ]
+    },
+    {
+      "id": "q60",
+      "category": "integration",
+      "query": "How is Opencode editor configured?",
+      "answer": "opencode.json mcpServers.pyce like Claude.",
+      "primary_files": [
+        "src/pyce/integration/editors.py"
+      ],
+      "secondary_files": [],
+      "must_mention": [
+        "opencode.json"
+      ]
+    },
+    {
+      "id": "q61",
+      "category": "config",
+      "query": "Default retrieval graph_expansion and max_chunks_per_file?",
+      "answer": "graph_expansion True; max_chunks_per_file 3.",
+      "primary_files": [
+        "src/pyce/config.py"
+      ],
+      "secondary_files": [
+        "src/pyce/retrieval/retriever.py"
+      ],
+      "must_mention": [
+        "graph_expansion",
+        "max_chunks_per_file"
+      ]
+    },
+    {
+      "id": "q62",
+      "category": "indexing",
+      "query": "How does pipeline discover files to index?",
+      "answer": "Walk under project_root, filter extensions and _should_ignore, batch processing.",
+      "primary_files": [
+        "src/pyce/indexer/pipeline.py"
+      ],
+      "secondary_files": [],
+      "must_mention": [
+        "run_indexing",
+        "project_root"
+      ]
+    },
+    {
+      "id": "q63",
+      "category": "storage",
+      "query": "What SQLite pragma do stores set on connect?",
+      "answer": "journal_mode=WAL in vector, fts, graph, embedding cache.",
+      "primary_files": [
+        "src/pyce/storage/vector_store.py"
+      ],
+      "secondary_files": [
+        "src/pyce/storage/fts_store.py",
+        "src/pyce/indexer/embedder.py"
+      ],
+      "must_mention": [
+        "journal_mode=WAL"
+      ]
+    },
+    {
+      "id": "q64",
+      "category": "retrieval",
+      "query": "What penalty applies to chunks from test or doc paths?",
+      "answer": "confidence *= 0.8 if 'test' or 'doc' in file_path lower.",
+      "primary_files": [
+        "src/pyce/retrieval/retriever.py"
+      ],
+      "secondary_files": [],
+      "must_mention": [
+        "0.8",
+        "file_path.lower"
+      ]
+    },
+    {
+      "id": "q65",
+      "category": "indexing",
+      "query": "What is the manifest JSON schema version key?",
+      "answer": "schema_version 1 in default manifest data.",
+      "primary_files": [
+        "src/pyce/indexer/manifest.py"
+      ],
+      "secondary_files": [],
+      "must_mention": [
+        "schema_version"
+      ]
+    }
+  ]
+}

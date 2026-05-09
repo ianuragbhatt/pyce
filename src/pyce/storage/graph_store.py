@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 import threading
 
 from pyce.models import EdgeType, GraphEdge, GraphNode, NodeType
+from pyce.storage.sqlite_compat import sqlite3
 
 
 class GraphStore:

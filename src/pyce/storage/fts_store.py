@@ -2,14 +2,20 @@
 
 from __future__ import annotations
 
-import sqlite3
 import threading
 
 from pyce.models import Chunk, ChunkType
+from pyce.storage.sqlite_compat import FTS5_AVAILABLE, sqlite3
 
 
 class FTSStore:
     def __init__(self, db_path: str):
+        if not FTS5_AVAILABLE:
+            raise RuntimeError(
+                "SQLite FTS5 is not available in this Python environment. "
+                "Install a Python build that includes FTS5, or install the optional "
+                "dependency `pysqlite3-binary` (recommended) and re-run."
+            )
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._lock = threading.RLock()

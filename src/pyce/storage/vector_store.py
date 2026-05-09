@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 import struct
 import threading
 
 import sqlite_vec
 
 from pyce.models import Chunk, ChunkType
+from pyce.storage.sqlite_compat import sqlite3
 
 
 class VectorStore:
@@ -17,9 +17,21 @@ class VectorStore:
         self._db_path = db_path
         self._dim = dim
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
-        self._conn.enable_load_extension(True)
-        sqlite_vec.load(self._conn)
-        self._conn.enable_load_extension(False)
+        self._vec_enabled = False
+        # Some Python builds disable extension loading (no enable_load_extension).
+        # In that case we gracefully degrade to keyword-only retrieval.
+        if hasattr(self._conn, "enable_load_extension"):
+            try:
+                self._conn.enable_load_extension(True)
+                sqlite_vec.load(self._conn)
+                self._vec_enabled = True
+            except Exception:
+                self._vec_enabled = False
+            finally:
+                try:
+                    self._conn.enable_load_extension(False)
+                except Exception:
+                    pass
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._lock = threading.RLock()
         self._init_tables()
@@ -47,15 +59,16 @@ class VectorStore:
                     PRIMARY KEY (chunk_id, level)
                 )
             """)
-            try:
-                self._conn.execute(f"""
-                    CREATE VIRTUAL TABLE IF NOT EXISTS chunks_vec USING vec0(
-                        chunk_id TEXT PRIMARY KEY,
-                        embedding float[{self._dim}]
-                    )
-                """)
-            except sqlite3.OperationalError:
-                pass
+            if self._vec_enabled:
+                try:
+                    self._conn.execute(f"""
+                        CREATE VIRTUAL TABLE IF NOT EXISTS chunks_vec USING vec0(
+                            chunk_id TEXT PRIMARY KEY,
+                            embedding float[{self._dim}]
+                        )
+                    """)
+                except sqlite3.OperationalError:
+                    self._vec_enabled = False
             self._conn.commit()
 
     def ingest(self, chunks: list[Chunk]) -> None:
@@ -81,20 +94,23 @@ class VectorStore:
             )
 
             vec_rows: list[tuple[str, bytes]] = []
-            for c in chunks:
-                if not c.embedding:
-                    continue
-                blob = struct.pack(f"{len(c.embedding)}f", *c.embedding)
-                vec_rows.append((c.id, blob))
-            if vec_rows:
-                self._conn.executemany(
-                    "INSERT OR REPLACE INTO chunks_vec (chunk_id, embedding) VALUES (?, ?)",
-                    vec_rows,
-                )
+            if self._vec_enabled:
+                for c in chunks:
+                    if not c.embedding:
+                        continue
+                    blob = struct.pack(f"{len(c.embedding)}f", *c.embedding)
+                    vec_rows.append((c.id, blob))
+                if vec_rows:
+                    self._conn.executemany(
+                        "INSERT OR REPLACE INTO chunks_vec (chunk_id, embedding) VALUES (?, ?)",
+                        vec_rows,
+                    )
             self._conn.commit()
 
     def search(self, query_embedding: list[float], top_k: int = 10) -> list[tuple[str, float]]:
         with self._lock:
+            if not self._vec_enabled:
+                return []
             blob = struct.pack(f"{len(query_embedding)}f", *query_embedding)
             rows = self._conn.execute(
                 "SELECT chunk_id, distance FROM chunks_vec WHERE embedding MATCH ? AND k = ?",
@@ -139,7 +155,11 @@ class VectorStore:
                 if chunk_ids:
                     placeholders = ",".join("?" for _ in chunk_ids)
                     self._conn.execute(f"DELETE FROM chunks WHERE id IN ({placeholders})", chunk_ids)
-                    self._conn.execute(f"DELETE FROM chunks_vec WHERE chunk_id IN ({placeholders})", chunk_ids)
+                    if self._vec_enabled:
+                        try:
+                            self._conn.execute(f"DELETE FROM chunks_vec WHERE chunk_id IN ({placeholders})", chunk_ids)
+                        except sqlite3.OperationalError:
+                            self._vec_enabled = False
             self._conn.commit()
 
     def get_all_chunk_hashes(self) -> set[str]:
